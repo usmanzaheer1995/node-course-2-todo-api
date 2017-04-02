@@ -1,6 +1,7 @@
 var express = require('express');
 var bodyParser = require('body-parser');
 const { ObjectID } = require('mongodb');
+const _ = require('lodash');
 
 var { mongoose } = require('./db/mongoose');
 var { Users } = require('./models/Users');
@@ -68,6 +69,35 @@ app.delete('/todos/:id', (request, response) => {
         response.status(404).send();
     });
 })
+
+//to update a resource, we use patch
+app.patch('/todos/:id', (request, response) => {
+    var id = request.params.id;
+
+    //to specify which properties the user can update in the model
+    var body = _.pick(request.body, ['text', 'completed']);
+
+    if (!ObjectID.isValid(id)) {
+        return response.status(404).send();
+    }
+    if (_.isBoolean(body.completed) && body.completed) {
+        body.completedAt = new Date().getTime();
+    }
+    else {
+        body.completed = 'false';
+        body.completedAt = null; 
+    }
+
+    Todo.findByIdAndUpdate(id, {$set:body}, {new:true}).then((todo) => {
+        if(!todo){
+            return response.status(404).send();
+        }
+        response.send({todo});
+    }).catch((err)=>{
+        response.status(400).send(err);
+    });
+        
+});
 
 app.listen(port, () => {
     console.log(`Started on port ${port}`);
