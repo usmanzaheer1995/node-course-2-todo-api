@@ -14,6 +14,21 @@ const port = process.env.PORT;
 
 app.use(bodyParser.json());
 
+app.post('/users', (request,response) => {
+    let body = _.pick(request.body, ['email', 'password'])
+    let user = new Users(body)
+
+    user.save().then(() => {
+        return user.generateAuthToken()
+    }).then((token) => {
+        //x- generates a custom header
+        response.header('x-auth', token).send(user)
+
+    }).catch((err) => {
+        response.status(400).send(err)
+    })
+})
+
 app.post('/todos', (request, response) => {
     //console.log(request.body);
     var todo = new Todo({
