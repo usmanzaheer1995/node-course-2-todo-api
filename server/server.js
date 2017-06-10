@@ -8,26 +8,12 @@ const _ = require('lodash');
 var { mongoose } = require('./db/mongoose');
 var { Users } = require('./models/Users');
 var { Todo } = require('./models/Todo');
+var { authenticate } = require('./middleware/authenticate')
 
 var app = express();
 const port = process.env.PORT;
 
 app.use(bodyParser.json());
-
-app.post('/users', (request,response) => {
-    let body = _.pick(request.body, ['email', 'password'])
-    let user = new Users(body)
-
-    user.save().then(() => {
-        return user.generateAuthToken()
-    }).then((token) => {
-        //x- generates a custom header
-        response.header('x-auth', token).send(user)
-
-    }).catch((err) => {
-        response.status(400).send(err)
-    })
-})
 
 app.post('/todos', (request, response) => {
     //console.log(request.body);
@@ -102,19 +88,38 @@ app.patch('/todos/:id', (request, response) => {
     }
     else {
         body.completed = 'false';
-        body.completedAt = null; 
+        body.completedAt = null;
     }
 
-    Todo.findByIdAndUpdate(id, {$set:body}, {new:true}).then((todo) => {
-        if(!todo){
+    Todo.findByIdAndUpdate(id, { $set: body }, { new: true }).then((todo) => {
+        if (!todo) {
             return response.status(404).send();
         }
-        response.send({todo});
-    }).catch((err)=>{
+        response.send({ todo });
+    }).catch((err) => {
         response.status(400).send(err);
     });
-        
+
 });
+
+app.post('/users', (request, response) => {
+    let body = _.pick(request.body, ['email', 'password'])
+    let user = new Users(body)
+
+    user.save().then(() => {
+        return user.generateAuthToken()
+    }).then((token) => {
+        //x- generates a custom header
+        response.header('x-auth', token).send(user)
+
+    }).catch((err) => {
+        response.status(400).send(err)
+    })
+})
+
+app.get('/users/me', authenticate, (req, res) => {
+    res.send(req.user)
+})
 
 app.listen(port, () => {
     console.log(`Started on port ${port}`);
