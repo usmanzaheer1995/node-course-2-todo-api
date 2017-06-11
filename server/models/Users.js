@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const validator = require('validator')
 const jwt = require('jsonwebtoken')
 const _ = require('lodash')
+const bcrypt = require('bcryptjs')
 
 var UserSchema = new mongoose.Schema({
     email: {
@@ -33,16 +34,16 @@ var UserSchema = new mongoose.Schema({
 })
 
 //instance method
-UserSchema.methods.toJSON = function() {
+UserSchema.methods.toJSON = function () {
     let user = this
     let userObject = user.toObject()
-    return _.pick(userObject,['_id','email'])
+    return _.pick(userObject, ['_id', 'email'])
 }
 
-UserSchema.methods.generateAuthToken = function(){
+UserSchema.methods.generateAuthToken = function () {
     let user = this
     let access = 'auth'
-    let token = jwt.sign({_id: user._id.toHexString(), access}, 'abc123').toString()
+    let token = jwt.sign({ _id: user._id.toHexString(), access }, process.env.JWT_SECRET).toString()
 
     user.tokens.push({
         access,
@@ -55,13 +56,25 @@ UserSchema.methods.generateAuthToken = function(){
 
 }
 
-//create Model mehtod
-UserSchema.statics.findByToken = function(token) {
+UserSchema.methods.removeToken = function(token) {
+    let user = this
+    return user.update({
+        //mongodb operator: it lets you remove an object from array which matches a certain criteria
+        $pull: {
+            tokens: {
+                token: token
+            }
+        }
+    })
+}
+
+//create Model method
+UserSchema.statics.findByToken = function (token) {
     let User = this
     let decoded
 
     try {
-        decoded = jwt.verify(token, 'abc123')
+        decoded = jwt.verify(token, process.env.JWT_SECRET)
     } catch (error) {
         return Promise.reject()
     }
@@ -72,7 +85,43 @@ UserSchema.statics.findByToken = function(token) {
         'tokens.access': 'auth',
     })
 }
- 
+
+UserSchema.statics.findByCredentials = function(email, password) {
+    let User = this
+
+    return User.findOne({email}).then((user) => {
+        if(!user){
+            return Promise.reject()
+        }
+        
+        return new Promise((resolve,reject) => {
+            bcrypt.compare(password, user.password, (err, result) => {
+                if(result){
+                    resolve(user)
+                }
+                else {
+                    reject()
+                }
+            })
+        })
+    })
+}
+
+//mongoose middleware
+UserSchema.pre("save", function (next) {
+    let user = this
+    if (user.isModified('password')) {
+        bcrypt.genSalt(10, (err,salt) => {
+            bcrypt.hash(user.password,salt, (err,hash) => {
+                user.password = hash
+                next()
+            })
+        })
+    } else {
+        next()
+    }
+})
+
 var Users = mongoose.model('Users', UserSchema);
 
 // var newUser = new Users({
